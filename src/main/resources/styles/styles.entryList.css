@@ -1,0 +1,99 @@
+/* Root of the Scene (background outside the container) */
+.root {
+    -fx-background-color: #f4f4f4; /* Light gray background outside the container */
+}
+
+/* General container */
+.container {
+    -fx-background-color: #f4f4f4; /* Very light gray, closer to white */
+    -fx-padding: 20px;
+    -fx-spacing: 10px;
+}
+
+/* Labels for non-editable fields (duration, created date, last modified) */
+.label-duration, .label-created-date, .label-last-modified {
+    -fx-font-family: 'Segoe UI', sans-serif;
+    -fx-font-size: 14px;
+    -fx-text-fill: #7f8c8d;
+    -fx-padding: 5px 0;
+}
+
+/* Label for description (non-editable initially) */
+.label-entry {
+    -fx-font-family: 'Segoe UI', sans-serif;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #495057;
+    -fx-padding: 10px;
+    -fx-wrap-text: true;
+}
+
+/* TextArea for editing description (editable field) */
+.textarea-edit {
+    -fx-font-family: 'Segoe UI', sans-serif;
+    -fx-font-size: 14px;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #ced4da; /* Light border */
+    -fx-padding: 8px;
+    -fx-min-height: 80px;
+    -fx-max-height: 300px;
+    -fx-wrap-text: true;
+}
+
+/* TextArea when focused */
+.textarea-edit:focused {
+    -fx-border-color: #3498db; /* Blue border when focused */
+}
+
+/* Buttons (delete button) */
+.button-delete {
+    -fx-background-color: #007bff;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 5px;
+    -fx-padding: 8px 15px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, #000000, 5, 0, 1, 1);
+    -fx-transition: all 0.2s ease-in-out;
+}
+
+.button-delete:hover {
+    -fx-background-color: #0056b3;
+    -fx-effect: dropshadow(gaussian, #000000, 5, 0, 1, 1);
+}
+
+/* Entry row (card-like appearance) */
+.entry-row {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 12px;
+    -fx-padding: 15px 20px;
+    -fx-spacing: 15px;
+    -fx-border-radius: 12px;
+    -fx-border-color: #e0e0e0;
+    -fx-border-width: 1px;
+    -fx-margin: 10px 0;
+    -fx-transition: all 0.3s ease-in-out;
+}
+
+.entry-row:hover {
+    -fx-background-color: #f9f9f9;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 12, 0, 0, 5);
+    -fx-cursor: hand;
+}
+
+.entry-row:pressed {
+    -fx-background-color: #f0f0f0;
+    -fx-border-color: #ccc;
+}
+
+/* ScrollPane */
+.scroll-pane {
+    -fx-background: transparent;
+    -fx-border: none;
+    -fx-padding: 5px;
+    -fx-hbar-policy: never;
+    -fx-vbar-policy: always;
+}
