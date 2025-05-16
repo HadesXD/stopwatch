@@ -97,3 +97,64 @@
     -fx-hbar-policy: never;
     -fx-vbar-policy: always;
 }
+
+/* --- From createUI() --- */
+
+.timer-label {
+    -fx-font-family: "Segoe UI Semibold";
+    -fx-font-size: 40px;
+    -fx-text-fill: #2c3e50;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 4, 0, 0, 0);
+}
+
+
+/* TextArea in the timer view */
+.textarea-description {
+    -fx-font-family: 'Segoe UI';
+    -fx-font-size: 14px;
+    -fx-border-radius: 12px;
+    -fx-background-radius: 12px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d0d7de;
+    -fx-padding: 12px;
+}
+
+/* Center content VBox */
+.center-content {
+    -fx-background-color: linear-gradient(to bottom right, #f1f4f8, #dfe9f3);
+    -fx-border-radius: 20px;
+}
+
+/* ComboBox filter style */
+.combo-filter {
+    -fx-font-size: 14px;
+    -fx-background-radius: 10px;
+}
+
+/* Add (+) button style */
+.button-add {
+    -fx-font-size: 16px;
+    -fx-background-color: #27ae60;
+    -fx-text-fill: white;
+    -fx-background-radius: 50%;
+    -fx-min-width: 30px;
+    -fx-min-height: 30px;
+    -fx-max-width: 30px;
+    -fx-max-height: 30px;
+}
+
+/* Styled Button */
+.styled-button {
+    -fx-font-family: 'Segoe UI Semibold';
+    -fx-font-size: 15px;
+    -fx-text-fill: white;
+    -fx-background-color: #3498db;
+    -fx-background-radius: 10px;
+    -fx-border-radius: 10px;
+    -fx-padding: 10px 20px;
+    -fx-cursor: hand;
+}
+
+.styled-button:hover {
+    -fx-background-color: #2980b9;
+}

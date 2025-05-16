@@ -12,6 +12,10 @@ public class Stopwatch {
     private AnimationTimer timer;
     private Runnable onUpdate;
 
+    public boolean isRunning() {
+        return running;
+    }
+
     public Stopwatch(Runnable onUpdate) {
         this.onUpdate = onUpdate;
         timer = new AnimationTimer() {
@@ -34,7 +38,7 @@ public class Stopwatch {
 
     public void stop() {
         if (running) {
-            elapsedTime = Duration.between(startTime, Instant.now());
+            elapsedTime = elapsedTime.plus(Duration.between(startTime, Instant.now()));
             running = false;
             timer.stop();
         }

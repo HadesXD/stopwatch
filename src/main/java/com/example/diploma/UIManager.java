@@ -4,12 +4,10 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.effect.DropShadow;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 import java.net.URL;
@@ -17,103 +15,133 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class UIManager {
+    private ComboBox<String> filterDropdown;
     private Label timerLabel;
     private Stopwatch stopwatch;
     private DatabaseManager dbManager = new DatabaseManager();
 
     public VBox createUI() {
-        // Timer label
-        timerLabel = new Label("00:00:00");
-        timerLabel.setFont(new Font("Segoe UI Semibold", 40));
-        timerLabel.setTextFill(Color.web("#2c3e50"));
-        timerLabel.setEffect(new DropShadow(4, Color.rgb(0, 0, 0, 0.2)));
-
-        // Stopwatch setup
+        timerLabel = createTimerLabel();
         stopwatch = new Stopwatch(() -> timerLabel.setText(stopwatch.getElapsedTime()));
 
-        // Buttons
-        Button startButton = createStyledButton("Start");
-        Button stopButton = createStyledButton("Stop");
-        Button saveButton = createStyledButton("Save Entry");
-        saveButton.setDisable(true);
+        TextArea descriptionArea = createDescriptionArea();
+        HBox filterBox = createFilterBox(); // now returns HBox with center alignment
+        VBox centerContent = createControlButtons(descriptionArea);
 
-        Button viewEntriesButton = createStyledButton("View Entries");
+        BorderPane layout = new BorderPane();
+        layout.setTop(filterBox);        // ✅ Centered HBox goes here
+        layout.setCenter(centerContent);
+
+        return new VBox(layout);
+    }
+
+    private Label createTimerLabel() {
+        Label label = new Label("00:00:00");
+        label.getStyleClass().add("timer-label");
+        return label;
+    }
+
+    private TextArea createDescriptionArea() {
+        TextArea area = new TextArea();
+        area.setPromptText("Add a short description...");
+        area.setWrapText(true);
+        area.setPrefHeight(100);
+        area.getStyleClass().add("textarea-description");
+        return area;
+    }
+
+    private HBox createFilterBox() {
+        // Create and populate the dropdown
+        filterDropdown = new ComboBox<>();
+        filterDropdown.getItems().addAll(dbManager.getAllFilters());
+        filterDropdown.setPromptText("Filter");
+        filterDropdown.setPrefWidth(150);
+        filterDropdown.getStyleClass().add("combo-filter");
+
+        // Create the '+' add filter button
+        Button addButton = new Button("+");
+        addButton.getStyleClass().add("button-add");
+        addButton.setOnAction(e -> showAddFilterDialog());
+
+        // Layout container for dropdown and add button
+        HBox hbox = new HBox(10, filterDropdown, addButton);
+        hbox.setAlignment(Pos.CENTER); // ✅ Center horizontally
+        hbox.setPadding(new Insets(10));
+
+        return hbox;
+    }
+
+    private void showAddFilterDialog() {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("New Filter");
+        dialog.setHeaderText("Add a new filter option");
+        dialog.setContentText("Filter name:");
+
+        dialog.showAndWait().ifPresentOrElse(name -> {
+            String trimmed = name.trim();
+            if (!trimmed.isEmpty() && !filterDropdown.getItems().contains(trimmed)) {
+                boolean saved = dbManager.saveFilter(trimmed);
+                if (saved) {
+                    filterDropdown.getItems().add(trimmed);
+                    filterDropdown.getSelectionModel().select(trimmed);
+                } else {
+                    showAlert("Filter not saved", "This filter may already exist.");
+                }
+            }
+        }, () -> System.out.println("Add filter dialog was cancelled."));
+    }
+
+    private Button createButton(String text) {
+        Button button = new Button(text);
+        button.getStyleClass().add("styled-button");
+        return button;
+    }
+
+    private VBox createControlButtons(TextArea descriptionArea) {
+        Button startButton = createButton("Start");
+        Button stopButton = createButton("Stop");
+        Button saveButton = createButton("Save Entry");
+        Button viewEntriesButton = createButton("View Entries");
+
+        saveButton.setDisable(true);
         viewEntriesButton.setOnAction(e -> showEntriesPopup());
 
-        // TextArea
-        TextArea descriptionArea = new TextArea();
-        descriptionArea.setPromptText("Add a short description...");
-        descriptionArea.setWrapText(true);
-        descriptionArea.setPrefHeight(100);
-        descriptionArea.setStyle("""
-            -fx-font-family: 'Segoe UI';
-            -fx-font-size: 14px;
-            -fx-border-radius: 12px;
-            -fx-background-radius: 12px;
-            -fx-background-color: #ffffff;
-            -fx-border-color: #d0d7de;
-            -fx-padding: 12px;
-        """);
+        startButton.setOnAction(e -> {
+            if (!stopwatch.isRunning()) {
+                stopwatch.start();
+                saveButton.setDisable(true);
+            }
+        });
 
-        // Event handlers
-        startButton.setOnAction(e -> stopwatch.start());
         stopButton.setOnAction(e -> {
             stopwatch.stop();
             saveButton.setDisable(false);
         });
+
         saveButton.setOnAction(e -> {
-            dbManager.saveEntry(timerLabel.getText(), descriptionArea.getText());
+            String selectedFilter = filterDropdown.getSelectionModel().getSelectedItem();
+            if (selectedFilter == null) {
+                System.out.println("⚠️ Please select a filter before saving.");
+                return;
+            }
+
+            dbManager.saveEntry(selectedFilter, timerLabel.getText(), descriptionArea.getText());
             saveButton.setDisable(true);
         });
 
-        // Layout
-        VBox layout = new VBox(20, timerLabel, startButton, stopButton, descriptionArea, saveButton, viewEntriesButton);
-        layout.setAlignment(Pos.CENTER);
-        layout.setPadding(new Insets(40));
-        layout.setStyle("""
-            -fx-background-color: linear-gradient(to bottom right, #f1f4f8, #dfe9f3);
-            -fx-border-radius: 20px;
-        """);
-
-        return layout;
+        VBox vbox = new VBox(20, timerLabel, startButton, stopButton, descriptionArea, saveButton, viewEntriesButton);
+        vbox.setAlignment(Pos.CENTER);
+        vbox.setPadding(new Insets(40));
+        vbox.getStyleClass().add("center-content");
+        return vbox;
     }
 
-    private Button createStyledButton(String text) {
-        Button button = new Button(text);
-        button.setStyle("""
-            -fx-font-family: 'Segoe UI Semibold';
-            -fx-font-size: 15px;
-            -fx-text-fill: white;
-            -fx-background-color: #3498db;
-            -fx-background-radius: 10px;
-            -fx-border-radius: 10px;
-            -fx-padding: 10px 20px;
-            -fx-cursor: hand;
-        """);
-
-        button.setOnMouseEntered(e -> button.setStyle("""
-            -fx-font-family: 'Segoe UI Semibold';
-            -fx-font-size: 15px;
-            -fx-text-fill: white;
-            -fx-background-color: #2980b9;
-            -fx-background-radius: 10px;
-            -fx-border-radius: 10px;
-            -fx-padding: 10px 20px;
-            -fx-cursor: hand;
-        """));
-
-        button.setOnMouseExited(e -> button.setStyle("""
-            -fx-font-family: 'Segoe UI Semibold';
-            -fx-font-size: 15px;
-            -fx-text-fill: white;
-            -fx-background-color: #3498db;
-            -fx-background-radius: 10px;
-            -fx-border-radius: 10px;
-            -fx-padding: 10px 20px;
-            -fx-cursor: hand;
-        """));
-
-        return button;
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
     private void showEntriesPopup() {

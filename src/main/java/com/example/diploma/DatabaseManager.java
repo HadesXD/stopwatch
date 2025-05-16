@@ -14,46 +14,124 @@ public class DatabaseManager {
     }
 
     // Save a time entry
-    public void saveEntry(String duration, String description) {
-        String sql = "INSERT INTO time_entries (duration, description, date_created, last_modified) VALUES (?, ?, ?, ?)";
-        String currentTimestamp = getCurrentTimestamp();
+    public void saveEntry(String filterName, String duration, String description) {
+        String timestamp = getCurrentTimestamp();
+        String getFilterIdSQL  = "SELECT id FROM filters WHERE name = ?";
+        String insertEntrySQL = "INSERT INTO time_entries (filter_id, duration, description, date_created, last_modified) " +
+                "VALUES (?, ?, ?, ?, ?)";
 
-        try (Connection conn = DriverManager.getConnection(URL);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, duration);
-            pstmt.setString(2, description);
-            pstmt.setString(3, currentTimestamp);
-            pstmt.setString(4, currentTimestamp);
-            pstmt.executeUpdate();
-            System.out.println("Entry saved successfully.");
+        try (Connection conn = DriverManager.getConnection(URL)) {
+            conn.setAutoCommit(false); // Start transaction
+
+            int filterId;
+
+            // Fetch filter ID from name
+            try (PreparedStatement getFilterIdStmt = conn.prepareStatement(getFilterIdSQL)) {
+                getFilterIdStmt.setString(1, filterName);
+                ResultSet rs = getFilterIdStmt.executeQuery();
+                if (rs.next()) {
+                    filterId = rs.getInt("id");
+                } else {
+                    System.err.println("❌ Filter not found: " + filterName);
+                    return;
+                }
+            }
+
+            // Insert time entry
+            try (PreparedStatement insertEntryStmt = conn.prepareStatement(insertEntrySQL)) {
+                insertEntryStmt.setInt(1, filterId);
+                insertEntryStmt.setString(2, duration);
+                insertEntryStmt.setString(3, description);
+                insertEntryStmt.setString(4, timestamp);
+                insertEntryStmt.setString(5, timestamp);
+                insertEntryStmt.executeUpdate();
+            }
+
+            conn.commit();
+            System.out.println("✅ Entry saved successfully.");
         } catch (SQLException e) {
             e.printStackTrace();
         }
+
     }
 
     // Ensure the table exists
     public void createTableIfNotExists() {
-        String sql = "CREATE TABLE IF NOT EXISTS time_entries (" +
+        // Create the filters table if it doesn't exist
+        String sqlFilters = "CREATE TABLE IF NOT EXISTS filters (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                "duration TEXT NOT NULL," +
-                "description TEXT," +
-                "date_created TEXT NOT NULL," +
-                "last_modified TEXT NOT NULL)";  // Added last_modified column
+                "name TEXT UNIQUE NOT NULL" +
+                ")";
+
+        // SQL to create time_entries table with foreign key constraint
+        String sqlTimeEntries = """
+        CREATE TABLE IF NOT EXISTS time_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filter_id INTEGER NOT NULL,
+            duration TEXT NOT NULL,
+            description TEXT NOT NULL,
+            date_created TEXT NOT NULL,
+            last_modified TEXT,
+            FOREIGN KEY (filter_id) REFERENCES filters(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """;
 
         try (Connection conn = DriverManager.getConnection(URL);
              Statement stmt = conn.createStatement()) {
-            stmt.execute(sql);
-            System.out.println("Checked/created table: time_entries");
+
+            // Enable foreign key support in SQLite
+            stmt.execute("PRAGMA foreign_keys = ON");
+
+            // Create filters first (must exist for the FK)
+            stmt.execute(sqlFilters);
+            stmt.execute(sqlTimeEntries);
+
+            System.out.println("Checked/created tables: filters, time_entries (with FK constraint)");
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
+
 
     // Show DB file path
     private void printDbPath() {
         File dbFile = new File("stopwatch.db");
         System.out.println("Using DB at: " + dbFile.getAbsolutePath());
     }
+
+    // Insert new filter if not exists
+    public boolean saveFilter(String filterName) {
+        String sql = "INSERT OR IGNORE INTO filters (name) VALUES (?)";
+        try (Connection conn = DriverManager.getConnection(URL);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, filterName);
+            int affectedRows = pstmt.executeUpdate();
+            return affectedRows > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // Get all filters
+    public List<String> getAllFilters() {
+        List<String> filters = new ArrayList<>();
+        String sql = "SELECT name FROM filters ORDER BY name ASC";
+
+        try (Connection conn = DriverManager.getConnection(URL);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                filters.add(rs.getString("name"));
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return filters;
+    }
+
 
     // Fetch all entries from the database
     public List<Entry> getAllEntries() {
