@@ -15,6 +15,12 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class UIManager {
+    private static final int CHARACTER_LIMIT = 100;
+    private static final double POPUP_WIDTH = 800;
+    private static final double POPUP_HEIGHT = 600;
+    private static final double SCENE_WIDTH = 500;
+    private static final double SCENE_HEIGHT = 400;
+
     private ComboBox<String> filterDropdown;
     private Label timerLabel;
     private Stopwatch stopwatch;
@@ -71,6 +77,12 @@ public class UIManager {
         return hbox;
     }
 
+    private Button createButton(String text) {
+        Button button = new Button(text);
+        button.getStyleClass().add("styled-button");
+        return button;
+    }
+
     private void showAddFilterDialog() {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("New Filter");
@@ -89,12 +101,6 @@ public class UIManager {
                 }
             }
         }, () -> System.out.println("Add filter dialog was cancelled."));
-    }
-
-    private Button createButton(String text) {
-        Button button = new Button(text);
-        button.getStyleClass().add("styled-button");
-        return button;
     }
 
     private VBox createControlButtons(TextArea descriptionArea) {
@@ -136,27 +142,62 @@ public class UIManager {
         return vbox;
     }
 
-    private void showAlert(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
+    private Stage createPopupStage() {
+        Stage stage = new Stage();
+        stage.setWidth(POPUP_WIDTH);
+        stage.setHeight(POPUP_HEIGHT);
+        stage.setResizable(false);
+        stage.setTitle("Saved Entries");
+        return stage;
+    }
+
+    private ScrollPane createScrollPane(VBox content) {
+        ScrollPane scrollPane = new ScrollPane(content);
+        scrollPane.setFitToWidth(true);
+        scrollPane.getStyleClass().add("scroll-pane");
+        return scrollPane;
+    }
+
+    private VBox createEntryContainer(List<Entry> entries, Stage popupStage) {
+        VBox container = new VBox(10);
+        container.getStyleClass().add("container");
+
+        if (entries.isEmpty()) {
+            Label noEntriesLabel = new Label("No entries yet.");
+            noEntriesLabel.getStyleClass().add("no-entries-label");
+            container.getChildren().add(noEntriesLabel);
+        } else {
+            AtomicReference<TextArea> activeEditField = new AtomicReference<>(null);
+            for (Entry entry : entries) {
+                container.getChildren().add(createEntryRow(entry, activeEditField, popupStage));
+            }
+        }
+
+        return container;
     }
 
     private void showEntriesPopup() {
+        final Stage popupStage = createPopupStage();
+        final List<Entry> entries = dbManager.getAllEntries();
+        final VBox container = createEntryContainer(entries, popupStage);
+        final ScrollPane scrollPane = createScrollPane(container);
+        final Scene scene = new Scene(scrollPane, SCENE_WIDTH, SCENE_HEIGHT);
+
+        loadStylesheet(scene);
+        popupStage.setScene(scene);
+        popupStage.show();
+    }
+
+    private void showEntriesPopup2() {
         var popupStage = new Stage();
-        popupStage.setWidth(800); // Set the width to 800px, for example
-        popupStage.setHeight(600); // Set the height as needed
+        popupStage.setWidth(800);
+        popupStage.setHeight(600);
         popupStage.setTitle("Saved Entries");
 
         var container = new VBox(10);
         container.getStyleClass().add("container");
 
-        // Fetch entries from the database
         List<Entry> entries = dbManager.getAllEntries();
-
-        // Check if there are no entries
         if (entries.isEmpty()) {
             var noEntriesLabel = new Label("No entries yet.");
             noEntriesLabel.getStyleClass().add("no-entries-label");
@@ -168,7 +209,6 @@ public class UIManager {
                 container.getChildren().add(createEntryRow(entry, activeEditField, popupStage));
             }
         }
-
         // Create a ScrollPane for better scrolling behavior
         var scrollPane = new ScrollPane(container);
         scrollPane.setFitToWidth(true);
@@ -185,50 +225,50 @@ public class UIManager {
     }
 
     private HBox createEntryRow(Entry entry, AtomicReference<TextArea> activeEditField, Stage popupStage) {
-        // Create non-editable fields: Duration, Created Date, Last Modified
+        // Fields that cannot be edited
         var durationLabel = new Label("⏱ " + entry.getDuration());
         durationLabel.getStyleClass().add("label-duration");
-
         var createdDateLabel = new Label("Created: " + entry.getDateCreated());
         createdDateLabel.getStyleClass().add("label-created-date");
-
         var lastModifiedLabel = new Label("Last Modified: " + entry.getLastModified());
         lastModifiedLabel.getStyleClass().add("label-last-modified");
-
-        // Group non-editable fields together in a VBox
         var nonEditableFields = new VBox(5, durationLabel, createdDateLabel, lastModifiedLabel);
         nonEditableFields.setAlignment(Pos.TOP_LEFT);
 
-        // Label for description (non-editable initially)
-        var descriptionLabel = new Label(entry.getDescription() == null ? "" : entry.getDescription());
+        // Description label (display-only with truncation)
+        String fullDescription = entry.getDescription() == null ? "" : entry.getDescription();
+        var descriptionLabel = new Label(truncate(fullDescription, CHARACTER_LIMIT));
         descriptionLabel.getStyleClass().add("label-entry");
 
-        // Create a TextArea for editable description (initially hidden)
-        var editArea = new TextArea(entry.getDescription() == null ? "" : entry.getDescription());
+        // Editable description area (no character limit)
+        var editArea = new TextArea(fullDescription);
         editArea.setVisible(false);
         editArea.setManaged(false);
         editArea.getStyleClass().add("textarea-edit");
+        editArea.setUserData(entry); // So we can fetch it later for the active field logic
 
-        // StackPane to manage description label and edit area
+        // StackPane to overlay label + TextArea
         var descriptionContainer = new StackPane(descriptionLabel, editArea);
-        StackPane.setAlignment(descriptionLabel, Pos.CENTER);
-        StackPane.setAlignment(editArea, Pos.CENTER);
+        StackPane.setAlignment(descriptionLabel, Pos.CENTER_LEFT);
+        StackPane.setAlignment(editArea, Pos.CENTER_LEFT);
         descriptionContainer.setPrefWidth(350);
 
-        // When the description label is clicked, switch to editable mode
+        // Click label → switch to edit mode
         descriptionLabel.setOnMouseClicked(e -> {
+            // Close previously active field if different
             if (activeEditField.get() != null && activeEditField.get() != editArea) {
                 TextArea active = activeEditField.get();
-                Entry activeEntry = (Entry) active.getUserData();
-                dbManager.updateDescription(activeEntry.getId(), active.getText());
-                Label sibling = (Label) ((StackPane) active.getParent()).getChildren().get(0);
-                sibling.setText("⏱ " + activeEntry.getDuration() + " - " + active.getText());
                 active.setVisible(false);
                 active.setManaged(false);
-                sibling.setVisible(true);
+                Entry activeEntry = (Entry) active.getUserData();
+                String updatedText = active.getText();
+                dbManager.updateDescription(activeEntry.getId(), updatedText);
+                active.setText(updatedText);
+                Label siblingLabel = (Label) ((StackPane) active.getParent()).getChildren().get(0);
+                siblingLabel.setText(truncate(updatedText, CHARACTER_LIMIT));
+                siblingLabel.setVisible(true);
             }
-
-            // Hide the label, show the editable TextArea
+            // Show edit field
             descriptionLabel.setVisible(false);
             editArea.setVisible(true);
             editArea.setManaged(true);
@@ -236,12 +276,12 @@ public class UIManager {
             activeEditField.set(editArea);
         });
 
-        // Save the edited description when focus is lost
+        // Lose focus → save and switch back to label
         editArea.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
             if (!isNowFocused) {
                 String newDescription = editArea.getText();
                 dbManager.updateDescription(entry.getId(), newDescription);
-                descriptionLabel.setText(newDescription);
+                descriptionLabel.setText(truncate(newDescription, CHARACTER_LIMIT));
                 descriptionLabel.setVisible(true);
                 editArea.setVisible(false);
                 editArea.setManaged(false);
@@ -249,8 +289,8 @@ public class UIManager {
             }
         });
 
-        // Delete button
-        var deleteBtn = new Button("🗑");
+        // Delete entry button
+        var deleteBtn = new Button("Delete");
         deleteBtn.getStyleClass().add("button-delete");
         deleteBtn.setOnAction(e -> {
             dbManager.deleteEntry(entry.getId());
@@ -258,66 +298,33 @@ public class UIManager {
             showEntriesPopup();
         });
 
-        // Create the complete entry row layout
+        // Full row layout
         var row = new HBox(10, nonEditableFields, descriptionContainer, deleteBtn);
         row.setAlignment(Pos.CENTER_LEFT);
         row.getStyleClass().add("entry-row");
-
         return row;
     }
 
-
-    private void handleLabelClick(Label label, TextField editField, AtomicReference<TextField> activeEditField) {
-        if (activeEditField.get() != null && activeEditField.get() != editField) {
-            TextField active = activeEditField.get();
-            Entry activeEntry = (Entry) active.getUserData();
-            dbManager.updateDescription(activeEntry.getId(), active.getText());
-            Label sibling = (Label) ((StackPane) active.getParent()).getChildren().get(0);
-            sibling.setText("⏱ " + activeEntry.getDuration() + " - " + active.getText());
-            active.setVisible(false);
-            active.setManaged(false);
-            sibling.setVisible(true);
-        }
-
-        label.setVisible(false);
-        editField.setVisible(true);
-        editField.setManaged(true);
-        editField.requestFocus();
-        activeEditField.set(editField);
+    private String truncate(String text, int limit) {
+        if (text == null) return "";
+        return text.length() > limit ? text.substring(0, limit) + "..." : text;
     }
 
-    private void handleEditFieldFocusLost(Entry entry, Label label, TextField editField, AtomicReference<TextField> activeEditField) {
-        if (!editField.isFocused()) {
-            String newDescription = sanitizeInput(editField.getText());  // Sanitize the input to avoid SQL injection
-            dbManager.updateDescription(entry.getId(), newDescription);
-            label.setText("⏱ " + entry.getDuration() + " - " + newDescription);
-            label.setVisible(true);
-            editField.setVisible(false);
-            editField.setManaged(false);
-            activeEditField.set(null);
-        }
-    }
-
-    private void deleteEntry(Entry entry, Stage popupStage) {
-        dbManager.deleteEntry(entry.getId());
-        popupStage.close();
-        showEntriesPopup(); // Refresh the popup with the updated entries
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
     private void loadStylesheet(Scene scene) {
-        URL cssUrl = getClass().getResource("/styles/styles.entryList.css");
+        final URL cssUrl = getClass().getResource("/styles/styles.entryList.css");
         if (cssUrl != null) {
             scene.getStylesheets().add(cssUrl.toExternalForm());
         } else {
             System.err.println("⚠️ Could not find styles.css!");
         }
     }
-
-    private String sanitizeInput(String input) {
-        // Remove potentially harmful characters that could lead to SQL injection
-        String sanitizedInput = input.replaceAll("[^\\w\\s]", "");
-        return sanitizedInput;
-    }
-
 
 }
