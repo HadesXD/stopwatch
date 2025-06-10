@@ -16,6 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class UIManager {
     private static final int CHARACTER_LIMIT = 100;
+    private static final int FILTER_LIMIT = 30;
+    private static final String ERROR_MSG = "Please use only letters, numbers, spaces, dashes or underscores, and keep it under {} characters.";
     private static final double POPUP_WIDTH = 800;
     private static final double POPUP_HEIGHT = 600;
     private static final double SCENE_WIDTH = 500;
@@ -30,25 +32,24 @@ public class UIManager {
         timerLabel = createTimerLabel();
         stopwatch = new Stopwatch(() -> timerLabel.setText(stopwatch.getElapsedTime()));
 
-        TextArea descriptionArea = createDescriptionArea();
-        HBox filterBox = createFilterBox(); // now returns HBox with center alignment
-        VBox centerContent = createControlButtons(descriptionArea);
+        var descriptionArea = createDescriptionArea();
+        var filterBox = createFilterBox();
+        var centerContent = createControlButtons(descriptionArea);
 
-        BorderPane layout = new BorderPane();
-        layout.setTop(filterBox);        // ✅ Centered HBox goes here
+        var layout = new BorderPane();
+        layout.setTop(filterBox);
         layout.setCenter(centerContent);
-
         return new VBox(layout);
     }
 
     private Label createTimerLabel() {
-        Label label = new Label("00:00:00");
+        var label = new Label("00:00:00");
         label.getStyleClass().add("timer-label");
         return label;
     }
 
     private TextArea createDescriptionArea() {
-        TextArea area = new TextArea();
+        var area = new TextArea();
         area.setPromptText("Add a short description...");
         area.setWrapText(true);
         area.setPrefHeight(100);
@@ -57,60 +58,67 @@ public class UIManager {
     }
 
     private HBox createFilterBox() {
-        // Create and populate the dropdown
+        var filters = dbManager.getAllFilters();
         filterDropdown = new ComboBox<>();
-        filterDropdown.getItems().addAll(dbManager.getAllFilters());
+        filterDropdown.getItems().addAll(filters);
         filterDropdown.setPromptText("Filter");
-        filterDropdown.setPrefWidth(150);
+        filterDropdown.setPrefWidth(200);
         filterDropdown.getStyleClass().add("combo-filter");
 
-        // Create the '+' add filter button
-        Button addButton = new Button("+");
-        addButton.getStyleClass().add("button-add");
-        addButton.setOnAction(e -> showAddFilterDialog());
+        // Select first item if available
+        if (!filters.isEmpty()) {
+            filterDropdown.getSelectionModel().selectFirst();
+        }
+
+        var newFilterButton = createButton("New Filter");
+        newFilterButton.setOnAction(e -> showAddFilterDialog());
 
         // Layout container for dropdown and add button
-        HBox hbox = new HBox(10, filterDropdown, addButton);
+        var hbox = new HBox(10, filterDropdown, newFilterButton);
         hbox.setAlignment(Pos.CENTER); // ✅ Center horizontally
         hbox.setPadding(new Insets(10));
-
         return hbox;
     }
 
-    private Button createButton(String text) {
-        Button button = new Button(text);
-        button.getStyleClass().add("styled-button");
-        return button;
-    }
-
     private void showAddFilterDialog() {
-        TextInputDialog dialog = new TextInputDialog();
+        var dialog = new TextInputDialog();
         dialog.setTitle("New Filter");
         dialog.setHeaderText("Add a new filter option");
         dialog.setContentText("Filter name:");
 
         dialog.showAndWait().ifPresentOrElse(name -> {
-            String trimmed = name.trim();
-            if (!trimmed.isEmpty() && !filterDropdown.getItems().contains(trimmed)) {
+            var trimmed = name.trim();
+            if (!isValid(trimmed, FILTER_LIMIT)) {
+                showAlert("Invalid Filter Name", ERROR_MSG);
+                return;
+            }
+
+            if (!filterDropdown.getItems().contains(trimmed)) {
                 boolean saved = dbManager.saveFilter(trimmed);
                 if (saved) {
                     filterDropdown.getItems().add(trimmed);
                     filterDropdown.getSelectionModel().select(trimmed);
                 } else {
-                    showAlert("Filter not saved", "This filter may already exist.");
+                    showAlert("Filter Not Saved", "This filter may already exist.");
                 }
+            } else {
+                showAlert("Duplicate Filter", "This filter name already exists.");
             }
         }, () -> System.out.println("Add filter dialog was cancelled."));
     }
 
     private VBox createControlButtons(TextArea descriptionArea) {
-        Button startButton = createButton("Start");
-        Button stopButton = createButton("Stop");
-        Button saveButton = createButton("Save Entry");
-        Button viewEntriesButton = createButton("View Entries");
+        var startButton = createButton("Start");
+        var stopButton = createButton("Stop");
+        var saveButton = createButton("Save Entry");
+        var viewEntriesButton = createButton("View Entries");
 
         saveButton.setDisable(true);
-        viewEntriesButton.setOnAction(e -> showEntriesPopup());
+        filterDropdown.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            viewEntriesButton.setDisable(newVal == null);
+            startButton.setDisable(newVal == null);
+            stopButton.setDisable(newVal == null);
+        });
 
         startButton.setOnAction(e -> {
             if (!stopwatch.isRunning()) {
@@ -124,61 +132,43 @@ public class UIManager {
             saveButton.setDisable(false);
         });
 
-        saveButton.setOnAction(e -> {
-            String selectedFilter = filterDropdown.getSelectionModel().getSelectedItem();
-            if (selectedFilter == null) {
-                System.out.println("⚠️ Please select a filter before saving.");
-                return;
-            }
+        saveButton.setOnAction(e -> saveEntry(descriptionArea.getText(), saveButton));
+        viewEntriesButton.setOnAction(e -> showEntriesPopup());
 
-            dbManager.saveEntry(selectedFilter, timerLabel.getText(), descriptionArea.getText());
-            saveButton.setDisable(true);
-        });
-
-        VBox vbox = new VBox(20, timerLabel, startButton, stopButton, descriptionArea, saveButton, viewEntriesButton);
+        var vbox = new VBox(20, timerLabel, startButton, stopButton, descriptionArea, saveButton, viewEntriesButton);
         vbox.setAlignment(Pos.CENTER);
         vbox.setPadding(new Insets(40));
         vbox.getStyleClass().add("center-content");
         return vbox;
     }
 
-    private Stage createPopupStage() {
-        Stage stage = new Stage();
-        stage.setWidth(POPUP_WIDTH);
-        stage.setHeight(POPUP_HEIGHT);
-        stage.setResizable(false);
-        stage.setTitle("Saved Entries");
-        return stage;
+    private Button createButton(String text) {
+        Button button = new Button(text);
+        button.getStyleClass().add("styled-button");
+        return button;
     }
 
-    private ScrollPane createScrollPane(VBox content) {
-        ScrollPane scrollPane = new ScrollPane(content);
-        scrollPane.setFitToWidth(true);
-        scrollPane.getStyleClass().add("scroll-pane");
-        return scrollPane;
-    }
-
-    private VBox createEntryContainer(List<Entry> entries, Stage popupStage) {
-        VBox container = new VBox(10);
-        container.getStyleClass().add("container");
-
-        if (entries.isEmpty()) {
-            Label noEntriesLabel = new Label("No entries yet.");
-            noEntriesLabel.getStyleClass().add("no-entries-label");
-            container.getChildren().add(noEntriesLabel);
-        } else {
-            AtomicReference<TextArea> activeEditField = new AtomicReference<>(null);
-            for (Entry entry : entries) {
-                container.getChildren().add(createEntryRow(entry, activeEditField, popupStage));
-            }
+    private void saveEntry(String description, Button saveButton) {
+        String selectedFilter = filterDropdown.getSelectionModel().getSelectedItem();
+        if (selectedFilter == null) {
+            System.out.println("⚠️ Please select a filter before saving.");
+            return;
+        }
+        if (!isValid(description.trim(), CHARACTER_LIMIT)) {
+            showAlert("Invalid Description", "Description must be under 200 characters and contain only valid text characters (letters, numbers, punctuation).");
+            return;
         }
 
-        return container;
+        dbManager.saveEntry(selectedFilter, timerLabel.getText(), description);
+        saveButton.setDisable(true);
     }
 
     private void showEntriesPopup() {
         final Stage popupStage = createPopupStage();
-        final List<Entry> entries = dbManager.getAllEntries();
+        var selectedFilter = filterDropdown.getSelectionModel().getSelectedItem();
+        List<Entry> entries = selectedFilter != null
+                ? dbManager.getEntries(selectedFilter)
+                : List.of();
         final VBox container = createEntryContainer(entries, popupStage);
         final ScrollPane scrollPane = createScrollPane(container);
         final Scene scene = new Scene(scrollPane, SCENE_WIDTH, SCENE_HEIGHT);
@@ -188,40 +178,37 @@ public class UIManager {
         popupStage.show();
     }
 
-    private void showEntriesPopup2() {
-        var popupStage = new Stage();
-        popupStage.setWidth(800);
-        popupStage.setHeight(600);
-        popupStage.setTitle("Saved Entries");
+    private Stage createPopupStage() {
+        var stage = new Stage();
+        stage.setWidth(POPUP_WIDTH);
+        stage.setHeight(POPUP_HEIGHT);
+        stage.setResizable(false);
+        stage.setTitle("Saved Entries");
+        return stage;
+    }
 
+    private ScrollPane createScrollPane(VBox content) {
+        var scrollPane = new ScrollPane(content);
+        scrollPane.setFitToWidth(true);
+        scrollPane.getStyleClass().add("scroll-pane");
+        return scrollPane;
+    }
+
+    private VBox createEntryContainer(List<Entry> entries, Stage popupStage) {
         var container = new VBox(10);
         container.getStyleClass().add("container");
 
-        List<Entry> entries = dbManager.getAllEntries();
         if (entries.isEmpty()) {
             var noEntriesLabel = new Label("No entries yet.");
             noEntriesLabel.getStyleClass().add("no-entries-label");
             container.getChildren().add(noEntriesLabel);
         } else {
-            // Create the UI elements for each entry
             AtomicReference<TextArea> activeEditField = new AtomicReference<>(null);
             for (Entry entry : entries) {
                 container.getChildren().add(createEntryRow(entry, activeEditField, popupStage));
             }
         }
-        // Create a ScrollPane for better scrolling behavior
-        var scrollPane = new ScrollPane(container);
-        scrollPane.setFitToWidth(true);
-        scrollPane.getStyleClass().add("scroll-pane");
-
-        // Create a Scene and add the stylesheet
-        var scene = new Scene(scrollPane, 500, 400);
-        loadStylesheet(scene);
-
-        // Set up the stage with the scene and show it
-        popupStage.setScene(scene);
-        popupStage.setResizable(false);
-        popupStage.show();
+        return container;
     }
 
     private HBox createEntryRow(Entry entry, AtomicReference<TextArea> activeEditField, Stage popupStage) {
@@ -236,7 +223,7 @@ public class UIManager {
         nonEditableFields.setAlignment(Pos.TOP_LEFT);
 
         // Description label (display-only with truncation)
-        String fullDescription = entry.getDescription() == null ? "" : entry.getDescription();
+        var fullDescription = entry.getDescription() == null ? "" : entry.getDescription();
         var descriptionLabel = new Label(truncate(fullDescription, CHARACTER_LIMIT));
         descriptionLabel.getStyleClass().add("label-entry");
 
@@ -289,17 +276,15 @@ public class UIManager {
             }
         });
 
-        // Delete entry button
-        var deleteBtn = new Button("Delete");
-        deleteBtn.getStyleClass().add("button-delete");
-        deleteBtn.setOnAction(e -> {
+        var deleteButton = new Button("Delete");
+        deleteButton.getStyleClass().add("button-delete");
+        deleteButton.setOnAction(e -> {
             dbManager.deleteEntry(entry.getId());
             popupStage.close();
             showEntriesPopup();
         });
 
-        // Full row layout
-        var row = new HBox(10, nonEditableFields, descriptionContainer, deleteBtn);
+        var row = new HBox(10, nonEditableFields, descriptionContainer, deleteButton);
         row.setAlignment(Pos.CENTER_LEFT);
         row.getStyleClass().add("entry-row");
         return row;
@@ -310,8 +295,12 @@ public class UIManager {
         return text.length() > limit ? text.substring(0, limit) + "..." : text;
     }
 
+    private boolean isValid(String value, int characterLimit) {
+        return value.matches("[\\w\\-\\s]+") && value.length() <= characterLimit;
+    }
+
     private void showAlert(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        var alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(message);

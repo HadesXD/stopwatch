@@ -1,11 +1,14 @@
 module com.example.diploma {
+    // JavaFX
     requires javafx.controls;
-    requires javafx.fxml;
 
+    // Styling (BootstrapFX)
     requires org.kordamp.bootstrapfx.core;
+    // System Tray support (AWT)
     requires java.desktop;
+    // Database (JDBC)
     requires java.sql;
 
-    opens com.example.diploma to javafx.fxml;
+    // Export public API
     exports com.example.diploma;
 }
