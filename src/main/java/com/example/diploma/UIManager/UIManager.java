@@ -1,5 +1,8 @@
-package com.example.diploma;
+package com.example.diploma.UIManager;
 
+import com.example.diploma.entities.Entry;
+import com.example.diploma.Stopwatch;
+import com.example.diploma.databaseManager.DatabaseManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -16,25 +19,27 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class UIManager {
     private static final int CHARACTER_LIMIT = 100;
-    private static final int FILTER_LIMIT = 30;
     private static final String ERROR_MSG = "Please use only letters, numbers, spaces, dashes or underscores, and keep it under {} characters.";
     private static final double POPUP_WIDTH = 800;
     private static final double POPUP_HEIGHT = 600;
     private static final double SCENE_WIDTH = 500;
     private static final double SCENE_HEIGHT = 400;
 
+    private static final String NO_UNIQUE_CHARACTERS = "[a-zA-Z0-9]*";
+    private static final Integer FILTER_LIMIT = 10;
+
     private ComboBox<String> filterDropdown;
     private Label timerLabel;
     private Stopwatch stopwatch;
     private DatabaseManager dbManager = new DatabaseManager();
 
-    public VBox createUI() {
+    public VBox createUI(String username) {
         timerLabel = createTimerLabel();
         stopwatch = new Stopwatch(() -> timerLabel.setText(stopwatch.getElapsedTime()));
 
         var descriptionArea = createDescriptionArea();
-        var filterBox = createFilterBox();
-        var centerContent = createControlButtons(descriptionArea);
+        var filterBox = createFilterBox(username);
+        var centerContent = createControlButtons(descriptionArea, username);
 
         var layout = new BorderPane();
         layout.setTop(filterBox);
@@ -57,47 +62,53 @@ public class UIManager {
         return area;
     }
 
-    private HBox createFilterBox() {
-        var filters = dbManager.getAllFilters();
+    private HBox createFilterBox(String username) {
+        var userId = dbManager.getUserId(username);
+        var filters = dbManager.getFiltersForUser(userId);
         filterDropdown = new ComboBox<>();
         filterDropdown.getItems().addAll(filters);
         filterDropdown.setPromptText("Filter");
         filterDropdown.setPrefWidth(200);
         filterDropdown.getStyleClass().add("combo-filter");
 
-        // Select first item if available
         if (!filters.isEmpty()) {
             filterDropdown.getSelectionModel().selectFirst();
         }
 
         var newFilterButton = createButton("New Filter");
-        newFilterButton.setOnAction(e -> showAddFilterDialog());
+        newFilterButton.setOnAction(e -> showAddFilterDialog(userId));
 
         // Layout container for dropdown and add button
         var hbox = new HBox(10, filterDropdown, newFilterButton);
-        hbox.setAlignment(Pos.CENTER); // ✅ Center horizontally
+        hbox.setAlignment(Pos.CENTER);
         hbox.setPadding(new Insets(10));
         return hbox;
     }
 
-    private void showAddFilterDialog() {
+    private void restrictInput(TextInputControl field) {
+        field.textProperty().addListener((observable, oldValue, newValue) -> {
+            if (!newValue.matches(NO_UNIQUE_CHARACTERS) || newValue.length() > FILTER_LIMIT) {
+                field.setText(oldValue);
+            }
+        });
+    }
+
+    private void showAddFilterDialog(Integer userId) {
         var dialog = new TextInputDialog();
         dialog.setTitle("New Filter");
         dialog.setHeaderText("Add a new filter option");
         dialog.setContentText("Filter name:");
+        restrictInput(dialog.getEditor());
 
-        dialog.showAndWait().ifPresentOrElse(name -> {
-            var trimmed = name.trim();
-            if (!isValid(trimmed, FILTER_LIMIT)) {
-                showAlert("Invalid Filter Name", ERROR_MSG);
-                return;
-            }
+        dialog.showAndWait().ifPresentOrElse(filterName -> {
+            var name = filterName.trim();
 
-            if (!filterDropdown.getItems().contains(trimmed)) {
-                boolean saved = dbManager.saveFilter(trimmed);
+            if (!filterDropdown.getItems().contains(name)) {
+                boolean saved = dbManager.saveFilter(name);
+                dbManager.assignFilterToUser(userId, name);
                 if (saved) {
-                    filterDropdown.getItems().add(trimmed);
-                    filterDropdown.getSelectionModel().select(trimmed);
+                    filterDropdown.getItems().add(name);
+                    filterDropdown.getSelectionModel().select(name);
                 } else {
                     showAlert("Filter Not Saved", "This filter may already exist.");
                 }
@@ -107,7 +118,7 @@ public class UIManager {
         }, () -> System.out.println("Add filter dialog was cancelled."));
     }
 
-    private VBox createControlButtons(TextArea descriptionArea) {
+    private VBox createControlButtons(TextArea descriptionArea, String username) {
         var startButton = createButton("Start");
         var stopButton = createButton("Stop");
         var saveButton = createButton("Save Entry");
@@ -167,7 +178,7 @@ public class UIManager {
         final Stage popupStage = createPopupStage();
         var selectedFilter = filterDropdown.getSelectionModel().getSelectedItem();
         List<Entry> entries = selectedFilter != null
-                ? dbManager.getEntries(selectedFilter)
+                ? dbManager.getEntriesForFilter(selectedFilter)
                 : List.of();
         final VBox container = createEntryContainer(entries, popupStage);
         final ScrollPane scrollPane = createScrollPane(container);
@@ -249,7 +260,7 @@ public class UIManager {
                 active.setManaged(false);
                 Entry activeEntry = (Entry) active.getUserData();
                 String updatedText = active.getText();
-                dbManager.updateDescription(activeEntry.getId(), updatedText);
+                dbManager.updateEntryDescription(activeEntry.getId(), updatedText);
                 active.setText(updatedText);
                 Label siblingLabel = (Label) ((StackPane) active.getParent()).getChildren().get(0);
                 siblingLabel.setText(truncate(updatedText, CHARACTER_LIMIT));
@@ -267,7 +278,7 @@ public class UIManager {
         editArea.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
             if (!isNowFocused) {
                 String newDescription = editArea.getText();
-                dbManager.updateDescription(entry.getId(), newDescription);
+                dbManager.updateEntryDescription(entry.getId(), newDescription);
                 descriptionLabel.setText(truncate(newDescription, CHARACTER_LIMIT));
                 descriptionLabel.setVisible(true);
                 editArea.setVisible(false);
@@ -296,7 +307,7 @@ public class UIManager {
     }
 
     private boolean isValid(String value, int characterLimit) {
-        return value.matches("[\\w\\-\\s]+") && value.length() <= characterLimit;
+        return value.matches("[\\w\\-\\s\\.\\?,!]+") && value.length() <= characterLimit;
     }
 
     private void showAlert(String title, String message) {

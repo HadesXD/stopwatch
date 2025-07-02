@@ -1,4 +1,4 @@
-package com.example.diploma;
+package com.example.diploma.entities;
 
 public class Entry {
     private int id;

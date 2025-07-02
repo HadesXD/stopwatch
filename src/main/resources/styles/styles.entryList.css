@@ -173,3 +173,23 @@
     -fx-text-fill: black;
     -fx-padding: 5;
 }
+
+/* Common style for TextField and PasswordField */
+.input-field {
+    -fx-font-family: 'Segoe UI', sans-serif;
+    -fx-font-size: 14px;
+    -fx-text-fill: #212529;
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8px;
+    -fx-border-color: #ced4da;
+    -fx-border-radius: 8px;
+    -fx-padding: 8px 12px;
+    -fx-effect: none;
+}
+
+/* Focused state to highlight active input */
+.input-field:focused {
+    -fx-border-color: #3498db;
+    -fx-background-color: #ffffff;
+    -fx-effect: dropshadow(gaussian, rgba(52, 152, 219, 0.2), 6, 0, 0, 2);
+}
